@@ -52,8 +52,10 @@ public class QdmModelInfoProvider implements ModelInfoProvider, NamespaceAware {
                     case "5.5":
                         return ModelInfoReaderFactory.getReader("application/xml").read(QdmModelInfoProvider.class.getResourceAsStream("/gov/healthit/qdm/qdm-modelinfo-5.5.xml"));
                     case "5.6":
-                    case "":
                         return ModelInfoReaderFactory.getReader("application/xml").read(QdmModelInfoProvider.class.getResourceAsStream("/gov/healthit/qdm/qdm-modelinfo-5.6.xml"));
+                    case "5.7":
+                    case "":
+                        return ModelInfoReaderFactory.getReader("application/xml").read(QdmModelInfoProvider.class.getResourceAsStream("/gov/healthit/qdm/qdm-modelinfo-5.7.xml"));
                 }
             } catch (IOException e) {
                 e.printStackTrace();
