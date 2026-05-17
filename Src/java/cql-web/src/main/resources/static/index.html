@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CQL Translator</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #1e1e2e;
+      color: #cdd6f4;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 16px;
+      background: #181825;
+      border-bottom: 1px solid #313244;
+      flex-shrink: 0;
+    }
+
+    header h1 {
+      font-size: 16px;
+      font-weight: 600;
+      color: #cba6f7;
+    }
+
+    header .subtitle {
+      font-size: 12px;
+      color: #6c7086;
+    }
+
+    .spacer { flex: 1; }
+
+    #translateBtn {
+      padding: 6px 18px;
+      background: #cba6f7;
+      color: #1e1e2e;
+      border: none;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    #translateBtn:hover { background: #b4befe; }
+    #translateBtn:disabled { background: #585b70; cursor: not-allowed; }
+
+    .main {
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+    }
+
+    .pane {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+
+    .pane:first-child {
+      border-right: 1px solid #313244;
+    }
+
+    .pane-label {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #6c7086;
+      padding: 6px 12px;
+      background: #181825;
+      border-bottom: 1px solid #313244;
+      flex-shrink: 0;
+    }
+
+    .editor-wrap {
+      flex: 1;
+      overflow: hidden;
+    }
+
+    #elmOutput {
+      flex: 1;
+      overflow: auto;
+      font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+      font-size: 13px;
+      line-height: 1.6;
+      padding: 12px;
+      white-space: pre;
+      color: #a6e3a1;
+      background: #1e1e2e;
+    }
+
+    #elmOutput.empty { color: #585b70; font-style: italic; font-family: inherit; white-space: normal; }
+    #elmOutput.error { color: #f38ba8; }
+
+    .errors-panel {
+      border-top: 1px solid #313244;
+      background: #181825;
+      max-height: 180px;
+      overflow-y: auto;
+      flex-shrink: 0;
+    }
+
+    .errors-panel:empty { display: none; }
+
+    .error-item {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      padding: 5px 12px;
+      font-size: 12px;
+      border-bottom: 1px solid #313244;
+    }
+
+    .error-item:last-child { border-bottom: none; }
+
+    .badge {
+      font-size: 10px;
+      font-weight: 700;
+      padding: 1px 6px;
+      border-radius: 3px;
+      flex-shrink: 0;
+    }
+
+    .badge-Error   { background: #f38ba8; color: #1e1e2e; }
+    .badge-Warning { background: #f9e2af; color: #1e1e2e; }
+    .badge-Info    { background: #89dceb; color: #1e1e2e; }
+
+    .error-loc { color: #6c7086; font-family: monospace; }
+    .error-msg { color: #cdd6f4; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>CQL Translator</h1>
+    <span class="subtitle">Clinical Quality Language &rarr; ELM JSON</span>
+    <div class="spacer"></div>
+    <button id="translateBtn">Translate</button>
+  </header>
+
+  <div class="main">
+    <div class="pane">
+      <div class="pane-label">CQL</div>
+      <div class="editor-wrap" id="editorContainer"></div>
+      <div class="errors-panel" id="errorsPanel"></div>
+    </div>
+    <div class="pane">
+      <div class="pane-label">ELM JSON</div>
+      <div id="elmOutput" class="empty">ELM output will appear here after translation.</div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.47.0/min/vs/loader.js"></script>
+  <script>
+    const INITIAL_CQL = `library "HelloCQL" version '1.0.0'
+
+using QDM version '5.6'
+
+context Patient
+
+define "Always True": true
+define "Always False": false
+
+define "Patient Age": AgeInYears() >= 18
+`;
+
+    require.config({ paths: { vs: 'https://cdn.jsdelivr.net/npm/monaco-editor@0.47.0/min/vs' } });
+
+    require(['vs/editor/editor.main'], function () {
+      // Register a basic CQL language (SQL-like keywords)
+      monaco.languages.register({ id: 'cql' });
+      monaco.languages.setMonarchTokensProvider('cql', {
+        keywords: [
+          'library', 'using', 'include', 'called', 'version', 'valueset',
+          'codesystem', 'code', 'concept', 'parameter', 'default',
+          'context', 'define', 'function', 'returns', 'return',
+          'with', 'without', 'such', 'that', 'from', 'where',
+          'let', 'in', 'exists', 'not', 'and', 'or', 'xor',
+          'is', 'as', 'cast', 'difference', 'distinct',
+          'before', 'after', 'during', 'same', 'starts', 'ends',
+          'true', 'false', 'null', 'if', 'then', 'else',
+          'all', 'collapse', 'expand', 'flatten', 'sort', 'by',
+          'asc', 'desc', 'ascending', 'descending',
+          'union', 'intersect', 'except', 'meets', 'overlaps',
+          'Patient', 'Population', 'Unfiltered',
+          'List', 'Tuple', 'Interval', 'DateTime', 'Date', 'Time',
+          'Integer', 'Decimal', 'String', 'Boolean', 'Quantity', 'Ratio'
+        ],
+        tokenizer: {
+          root: [
+            [/\/\/.*$/, 'comment'],
+            [/\/\*/, 'comment', '@blockComment'],
+            [/'[^']*'/, 'string'],
+            [/"[^"]*"/, 'string.identifier'],
+            [/\b(0|[1-9][0-9]*)(\.[0-9]+)?\b/, 'number'],
+            [/[a-zA-Z_][\w]*/, {
+              cases: {
+                '@keywords': 'keyword',
+                '@default': 'identifier'
+              }
+            }],
+            [/[{}()\[\]]/, 'delimiter'],
+            [/[<>]=?|[!=]=|[-+*\/,.:;@~]/, 'operator'],
+          ],
+          blockComment: [
+            [/[^/*]+/, 'comment'],
+            [/\*\//, 'comment', '@pop'],
+            [/[/*]/, 'comment'],
+          ]
+        }
+      });
+
+      const editor = monaco.editor.create(document.getElementById('editorContainer'), {
+        value: INITIAL_CQL,
+        language: 'cql',
+        theme: 'vs-dark',
+        fontSize: 13,
+        minimap: { enabled: false },
+        scrollBeyondLastLine: false,
+        automaticLayout: true,
+        fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace",
+        lineNumbers: 'on',
+        renderLineHighlight: 'all',
+      });
+
+      const btn = document.getElementById('translateBtn');
+      const output = document.getElementById('elmOutput');
+      const errorsPanel = document.getElementById('errorsPanel');
+
+      async function translate() {
+        const cql = editor.getValue();
+        btn.disabled = true;
+        btn.textContent = 'Translating…';
+        output.className = '';
+        output.textContent = '';
+        errorsPanel.innerHTML = '';
+
+        try {
+          const res = await fetch('/translate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ cql })
+          });
+
+          if (!res.ok) {
+            output.className = 'error';
+            output.textContent = `Server error: HTTP ${res.status}`;
+            return;
+          }
+
+          const data = await res.json();
+
+          // Show errors / warnings
+          if (data.errors && data.errors.length > 0) {
+            data.errors.forEach(e => {
+              const item = document.createElement('div');
+              item.className = 'error-item';
+
+              const badge = document.createElement('span');
+              badge.className = `badge badge-${e.severity}`;
+              badge.textContent = e.severity;
+
+              const loc = document.createElement('span');
+              loc.className = 'error-loc';
+              loc.textContent = e.line ? `L${e.line}:${e.char}` : '';
+
+              const msg = document.createElement('span');
+              msg.className = 'error-msg';
+              msg.textContent = e.message;
+
+              item.appendChild(badge);
+              if (e.line) item.appendChild(loc);
+              item.appendChild(msg);
+              errorsPanel.appendChild(item);
+            });
+          }
+
+          if (data.elm) {
+            // Pretty-print JSON
+            try {
+              const parsed = JSON.parse(data.elm);
+              output.textContent = JSON.stringify(parsed, null, 2);
+            } catch (_) {
+              output.textContent = data.elm;
+            }
+          } else if (!data.errors || data.errors.length === 0) {
+            output.className = 'empty';
+            output.textContent = 'Translation produced no output.';
+          } else {
+            output.className = 'empty';
+            output.textContent = 'Translation failed — see errors below.';
+          }
+
+        } catch (err) {
+          output.className = 'error';
+          output.textContent = `Request failed: ${err.message}`;
+        } finally {
+          btn.disabled = false;
+          btn.textContent = 'Translate';
+        }
+      }
+
+      btn.addEventListener('click', translate);
+
+      // Ctrl+Enter / Cmd+Enter to translate
+      editor.addCommand(
+        monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter,
+        translate
+      );
+    });
+  </script>
+</body>
+</html>

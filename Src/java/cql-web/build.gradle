@@ -1,0 +1,39 @@
+plugins {
+    id 'java'
+    id 'application'
+    id 'com.github.johnrengelman.shadow' version '8.1.1'
+}
+
+repositories {
+    mavenLocal()
+    mavenCentral()
+    maven {
+        url "https://oss.sonatype.org/content/repositories/snapshots"
+    }
+}
+
+compileJava {
+    options.release = 11
+}
+
+dependencies {
+    implementation project(':cql-to-elm')
+    implementation project(':model-jaxb')
+    implementation project(':elm-jaxb')
+    implementation project(':quick')
+    implementation project(':qdm')
+    implementation 'io.javalin:javalin:6.3.0'
+    implementation 'com.fasterxml.jackson.core:jackson-databind:2.15.2'
+    implementation 'org.slf4j:slf4j-simple:2.0.9'
+    runtimeOnly 'org.eclipse.persistence:org.eclipse.persistence.moxy:2.7.7'
+}
+
+application {
+    mainClass = 'org.cqframework.cql.web.CqlWebServer'
+}
+
+shadowJar {
+    archiveBaseName = 'cql-web'
+    archiveClassifier = ''
+    mergeServiceFiles()
+}
